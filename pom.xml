@@ -121,11 +121,6 @@
                 <groupId>org.scalatest</groupId>
                 <artifactId>scalatest-maven-plugin</artifactId>
                 <version>2.0.0</version>
-                <!--<configuration>
-                    <outputDirectory>nifi-akka-processors/target/classes</outputDirectory>
-                    <testOutputDirectory>nifi-akka-processors/target/test-classes</testOutputDirectory>
-                    <reportsDirectory>nifi-akka-processors/target/scalatest-reports</reportsDirectory>
-                </configuration>-->
                 <executions>
                     <execution>
                         <id>test</id>
@@ -157,4 +152,13 @@
             </plugin>
         </plugins>
     </build>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.scalatest</groupId>
+            <artifactId>scalatest_${scala.major.version}</artifactId>
+            <version>${scalatest.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>

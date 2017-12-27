@@ -2,6 +2,7 @@
 *.class
 *.log
 .idea
+*.iml
 
 # sbt specific
 .cache
