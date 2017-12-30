@@ -53,15 +53,13 @@ class Router extends AbstractProcessor with RouterProperties with RouterRelation
 
   sealed trait Message {
     def messageType: MessageType
-    def get: String
+    def data: String
   }
   case class GoodMessage(tpe: String, data: String) extends Message {
     val messageType = DataMessageType(tpe)
-    def get: String = data
   }
   case class BadMessage(data: String) extends Message {
     val messageType: MessageType = ErrorMessageType
-    def get: String = data
   }
 
   override def getSupportedDynamicPropertyDescriptor(propertyDescriptorName: String): PropertyDescriptor = {
@@ -115,7 +113,7 @@ class Router extends AbstractProcessor with RouterProperties with RouterRelation
           def add(elem: Message): Unit = {
             if (nonEmpty) writer.newLine()
             nonEmpty = true
-            writer.write(elem.get)
+            writer.write(elem.data)
           }
           def close(): FlowFile = {
             writer.flush()
