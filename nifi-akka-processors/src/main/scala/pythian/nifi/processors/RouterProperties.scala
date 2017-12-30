@@ -37,17 +37,13 @@ object RouterProperties extends RouterProperties {
     override def validate(subject: String, input: String, context: ValidationContext): ValidationResult = {
       val compiled = LineProcessor.compile(input)
       val text = compiled match {
-        case Failure(ex) =>
-          val sw = new StringWriter()
-          val pw = new PrintWriter(sw)
-          ex.printStackTrace(pw)
-          sw.toString
+        case Failure(ex) => ex.toString
         case _ =>
       }
       new ValidationResult.Builder()
         .subject(subject)
         .input(input)
-        .explanation(s"Compilation failed with exception\n" + text)
+        .explanation(s"Compilation failed with exception: $text")
         .valid(compiled.isSuccess)
         .build()
     }
