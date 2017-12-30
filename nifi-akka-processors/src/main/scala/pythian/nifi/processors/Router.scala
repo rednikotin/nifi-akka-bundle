@@ -63,7 +63,7 @@ class Router extends AbstractProcessor with RouterProperties with RouterRelation
   }
 
   override def getSupportedDynamicPropertyDescriptor(propertyDescriptorName: String): PropertyDescriptor = {
-    if (propertyDescriptorName == RelUnmatched.getName) {
+    if (relationships.map(_.getName).contains(propertyDescriptorName)) {
       null
     } else {
       new PropertyDescriptor.Builder()
