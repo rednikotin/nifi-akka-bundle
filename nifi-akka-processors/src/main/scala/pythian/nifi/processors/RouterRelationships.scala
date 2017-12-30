@@ -20,15 +20,15 @@ package pythian.nifi.processors
 import org.apache.nifi.processor.Relationship
 
 trait RouterRelationships {
-  val RelSuccess =
+  val RelUnmatched: Relationship =
     new Relationship.Builder()
-      .name("success")
+      .name("unmatched")
       .description("""
         Any FlowFile that is successfully transferred is routed to this relationship
       """.trim)
       .build
 
-  val RelFailure =
+  val RelFailure: Relationship =
     new Relationship.Builder()
       .name("failure")
       .description("""
@@ -36,7 +36,15 @@ trait RouterRelationships {
       """.trim)
       .build
 
-  lazy val relationships = Set(RelSuccess, RelFailure)
+  val RelIncompatible: Relationship =
+    new Relationship.Builder()
+      .name("incompatible")
+      .description("""
+          FlowFile contains rows when processing failed
+      """.trim)
+      .build
+
+  lazy val relationships = Set(RelUnmatched, RelFailure, RelIncompatible)
 }
 
 object RouterRelationships extends RouterRelationships

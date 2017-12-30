@@ -16,21 +16,40 @@
  */
 package pythian.nifi.processors
 
-// NiFi
-import org.apache.nifi.components.PropertyDescriptor
-import org.apache.nifi.processor.util.StandardValidators
+import java.io.{ PrintWriter, StringWriter }
+import org.apache.nifi.components.{ PropertyDescriptor, ValidationContext, ValidationResult, Validator }
+import scala.util.Failure
 
 trait RouterProperties {
-  val ExampleProperty =
+  val PROCESSOR: PropertyDescriptor =
     new PropertyDescriptor.Builder()
-      .name("Example Property")
-      .description("Whatever the property does")
+      .name("Processor code")
+      .description("Function String => (String, String)")
       .required(true)
-      .expressionLanguageSupported(true)
-      .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+      .addValidator(RouterProperties.CODE_VALIDATOR)
       .build
 
-  lazy val properties = List(ExampleProperty)
+  lazy val properties = List(PROCESSOR)
 }
 
-object RouterProperties extends RouterProperties
+object RouterProperties extends RouterProperties {
+  private val CODE_VALIDATOR = new Validator() {
+    override def validate(subject: String, input: String, context: ValidationContext): ValidationResult = {
+      val compiled = LineProcessor.compile(input)
+      val text = compiled match {
+        case Failure(ex) =>
+          val sw = new StringWriter()
+          val pw = new PrintWriter(sw)
+          ex.printStackTrace(pw)
+          sw.toString
+        case _ =>
+      }
+      new ValidationResult.Builder()
+        .subject(subject)
+        .input(input)
+        .explanation(s"Compilation failed with exception\n" + text)
+        .valid(compiled.isSuccess)
+        .build()
+    }
+  }
+}
