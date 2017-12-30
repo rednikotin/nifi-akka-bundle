@@ -19,7 +19,8 @@ object LineProcessor {
           case Some(compiled) => Success(compiled)
           case None =>
             Try {
-              val tree = toolbox.parse(code)
+              val wrapped = s"val fun: String => (String, String) = {\n$code\n}\nfun"
+              val tree = toolbox.parse(wrapped)
               val compiled = toolbox.eval(tree).asInstanceOf[Processor]
               processors.put(code, compiled)
               compiled
