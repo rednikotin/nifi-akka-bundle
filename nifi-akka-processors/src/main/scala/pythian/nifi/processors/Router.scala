@@ -96,59 +96,68 @@ class Router extends AbstractProcessor with RouterProperties with RouterRelation
 
     Option(inFlowFile) match {
       case Some(_) =>
-        val processorCode = context.getProperty(PROCESSOR).getValue
-        val processor = compile(processorCode).get
-
         val filename = inFlowFile.getAttribute("filename")
         val in = session.read(inFlowFile)
 
-        case class FlowFileSink(s: MessageType) extends RoutingSink.Sink[Message, FlowFile] {
-          private val outFileName = filename + "." + s.name
-          //Paths.get(outFileName)
-          private val outFlowFile = session.create(inFlowFile)
-          session.putAttribute(outFlowFile, "filename", outFileName)
-          private val out = session.write(outFlowFile)
-          private var nonEmpty = false
-          private val writer = new BufferedWriter(new OutputStreamWriter(out))
-          def add(elem: Message): Unit = {
-            if (nonEmpty) writer.newLine()
-            nonEmpty = true
-            writer.write(elem.data)
+        Try {
+          val processorCode = context.getProperty(PROCESSOR).getValue
+          val processor = compile(processorCode).get
+
+          case class FlowFileSink(s: MessageType) extends RoutingSink.Sink[Message, FlowFile] {
+            private val outFileName = filename + "." + s.name
+            //Paths.get(outFileName)
+            private val outFlowFile = session.create(inFlowFile)
+            session.putAttribute(outFlowFile, "filename", outFileName)
+            private val out = session.write(outFlowFile)
+            private var nonEmpty = false
+            private val writer = new BufferedWriter(new OutputStreamWriter(out))
+
+            def add(elem: Message): Unit = {
+              if (nonEmpty) writer.newLine()
+              nonEmpty = true
+              writer.write(elem.data)
+            }
+
+            def close(): FlowFile = {
+              writer.flush()
+              writer.close()
+              outFlowFile
+            }
           }
-          def close(): FlowFile = {
-            writer.flush()
-            writer.close()
-            outFlowFile
+
+          val groupBy = RoutingSink.create[Message, MessageType, FlowFile](FlowFileSink, _.messageType)
+
+          val br = new BufferedReader(new InputStreamReader(in))
+          var line: String = null
+          while ( {
+            line = br.readLine()
+            line != null
+          }) {
+            val data = Try {
+              val (tpe, data) = processor(line)
+              GoodMessage(tpe, data)
+            }.getOrElse(BadMessage(line))
+            groupBy.add(data)
           }
+          in.close()
+
+          val files = groupBy.close()
+
+          files.foreach {
+            case (ErrorMessageType, file) =>
+              session.transfer(file, RelIncompatible)
+            case (DataMessageType(name), file) =>
+              val rel = dynamicRelationships.get.getOrElse(name, RelUnmatched)
+              session.transfer(file, rel)
+          }
+
+          session.remove(inFlowFile)
+        } recover {
+          case ex =>
+            getLogger.error(s"Processing failed for file=$filename", ex)
+            in.close()
+            session.transfer(inFlowFile, RelFailure)
         }
-
-        val groupBy = RoutingSink.create[Message, MessageType, FlowFile](FlowFileSink, _.messageType)
-
-        val br = new BufferedReader(new InputStreamReader(in))
-        var line: String = null
-        while ({
-          line = br.readLine()
-          line != null
-        }) {
-          val data = Try {
-            val (tpe, data) = processor(line)
-            GoodMessage(tpe, data)
-          }.getOrElse(BadMessage(line))
-          groupBy.add(data)
-        }
-        in.close()
-
-        val files = groupBy.close()
-
-        files.foreach {
-          case (ErrorMessageType, file) =>
-            session.transfer(file, RelIncompatible)
-          case (DataMessageType(name), file) =>
-            val rel = dynamicRelationships.get.getOrElse(name, RelUnmatched)
-            session.transfer(file, rel)
-        }
-
-        session.remove(inFlowFile)
 
       case None =>
 

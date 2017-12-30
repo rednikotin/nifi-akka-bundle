@@ -16,7 +16,6 @@
  */
 package pythian.nifi.processors
 
-import java.io.{ PrintWriter, StringWriter }
 import org.apache.nifi.components.{ PropertyDescriptor, ValidationContext, ValidationResult, Validator }
 import scala.util.Failure
 
