@@ -47,21 +47,6 @@ class Router extends AbstractProcessor with RouterProperties with RouterRelation
   private val processorId = "ProcessorSystem-" + UUID.randomUUID().toString
   implicit val system: ActorSystem = ActorSystem(processorId)
 
-  sealed trait MessageType { def name: String }
-  object ErrorMessageType extends MessageType { val name = "processor.errors" }
-  case class DataMessageType(name: String) extends MessageType
-
-  sealed trait Message {
-    def messageType: MessageType
-    def data: String
-  }
-  case class GoodMessage(tpe: String, data: String) extends Message {
-    val messageType = DataMessageType(tpe)
-  }
-  case class BadMessage(data: String) extends Message {
-    val messageType: MessageType = ErrorMessageType
-  }
-
   override def getSupportedDynamicPropertyDescriptor(propertyDescriptorName: String): PropertyDescriptor = {
     if (relationships.map(_.getName).contains(propertyDescriptorName)) {
       null
@@ -103,8 +88,21 @@ class Router extends AbstractProcessor with RouterProperties with RouterRelation
           val processorCode = context.getProperty(PROCESSOR).getValue
           val processor = compile(processorCode).get
 
-          case class FlowFileSink(s: MessageType) extends RoutingSink.Sink[Message, FlowFile] {
-            private val outFileName = filename + "." + s.name
+          // message types
+          trait KeyType { def name: String }
+          object ErrorKeyType extends KeyType { val name: String = RelIncompatible.getName }
+          case class DataKeyType(name: String) extends KeyType
+
+          // messages
+          trait KeyValue {
+            def keyType: KeyType
+            def value: String
+          }
+          case class GoodKeyValue(tpe: String, value: String) extends KeyValue { val keyType = DataKeyType(tpe) }
+          case class ErrorKeyValue(value: String) extends KeyValue { val keyType: KeyType = ErrorKeyType }
+
+          case class FlowFileSink(key: KeyType) extends RoutingSink.Sink[KeyValue, FlowFile] {
+            private val outFileName = filename + "." + key.name
             //Paths.get(outFileName)
             private val outFlowFile = session.create(inFlowFile)
             session.putAttribute(outFlowFile, "filename", outFileName)
@@ -112,10 +110,10 @@ class Router extends AbstractProcessor with RouterProperties with RouterRelation
             private var nonEmpty = false
             private val writer = new BufferedWriter(new OutputStreamWriter(out))
 
-            def add(elem: Message): Unit = {
+            def add(elem: KeyValue): Unit = {
               if (nonEmpty) writer.newLine()
               nonEmpty = true
-              writer.write(elem.data)
+              writer.write(elem.value)
             }
 
             def close(): FlowFile = {
@@ -125,7 +123,7 @@ class Router extends AbstractProcessor with RouterProperties with RouterRelation
             }
           }
 
-          val groupBy = RoutingSink.create[Message, MessageType, FlowFile](FlowFileSink, _.messageType)
+          val groupBy = RoutingSink.create[KeyValue, KeyType, FlowFile](FlowFileSink, _.keyType)
 
           val br = new BufferedReader(new InputStreamReader(in))
           var line: String = null
@@ -135,8 +133,8 @@ class Router extends AbstractProcessor with RouterProperties with RouterRelation
           }) {
             val data = Try {
               val (tpe, data) = processor(line)
-              GoodMessage(tpe, data)
-            }.getOrElse(BadMessage(line))
+              GoodKeyValue(tpe, data)
+            }.getOrElse(ErrorKeyValue(line))
             groupBy.add(data)
           }
           in.close()
@@ -144,9 +142,9 @@ class Router extends AbstractProcessor with RouterProperties with RouterRelation
           val files = groupBy.close()
 
           files.foreach {
-            case (ErrorMessageType, file) =>
+            case (ErrorKeyType, file) =>
               session.transfer(file, RelIncompatible)
-            case (DataMessageType(name), file) =>
+            case (DataKeyType(name), file) =>
               val rel = dynamicRelationships.get.getOrElse(name, RelUnmatched)
               session.transfer(file, rel)
           }

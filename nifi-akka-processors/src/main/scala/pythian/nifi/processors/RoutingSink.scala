@@ -11,70 +11,70 @@ object RoutingSink {
 
   implicit val timeout: Timeout = 10.second
 
-  trait Sink[T, R] {
-    def add(elem: T): Unit
-    def close(): R
+  trait Sink[KV, Out] {
+    def add(elem: KV): Unit
+    def close(): Out
   }
 
-  def create[T, S, R](init: S => Sink[T, R], groupBy: T => S)(implicit system: ActorSystem): Sink[T, List[(S, R)]] = {
+  def create[KV, K, Out](init: K => Sink[KV, Out], groupBy: KV => K)(implicit system: ActorSystem): Sink[KV, List[(K, Out)]] = {
 
-    case class Data(content: T)
+    case class Data(kv: KV)
     object Finish
-    case class Complete(ret: List[(S, R)])
-    case class WorkerComplete(ret: (S, R))
+    case class Complete(kOuts: List[(K, Out)])
+    case class WorkerComplete(kOut: (K, Out))
 
     class Router extends Actor {
-      private var groups = Map.empty[S, ActorRef]
-      private var actors = Map.empty[ActorRef, S]
+      private var groups = Map.empty[K, ActorRef]
+      private var actors = Map.empty[ActorRef, K]
       private var finishSender: ActorRef = _
-      private var rets = List.empty[(S, R)]
+      private var kOuts = List.empty[(K, Out)]
       def receive: Receive = {
-        case data @ Data(t) =>
-          val s = groupBy(t)
-          val worker = groups.get(s) match {
+        case data @ Data(kv) =>
+          val k = groupBy(kv)
+          val worker = groups.get(k) match {
             case Some(res) =>
               res
             case None =>
-              val worker = context.actorOf(Props(new Worker(s)))
+              val worker = context.actorOf(Props(new Worker(k)))
               context.watch(worker)
-              groups = groups + (s -> worker)
-              actors = actors + (worker -> s)
+              groups = groups + (k -> worker)
+              actors = actors + (worker -> k)
               worker
           }
           worker ! data
         case Finish =>
           finishSender = sender()
           actors.keys.foreach(_ ! Finish)
-        case WorkerComplete(ret) =>
-          rets = ret :: rets
+        case WorkerComplete(kOut) =>
+          kOuts = kOut :: kOuts
         case Terminated(actor) =>
           val s = actors(actor)
           groups = groups - s
           actors = actors - actor
           if (actors.isEmpty) {
-            finishSender ! Complete(rets)
+            finishSender ! Complete(kOuts)
             context.stop(self)
           }
       }
     }
 
-    class Worker(s: S) extends Actor {
-      private val sink = init(s)
+    class Worker(k: K) extends Actor {
+      private val sink = init(k)
       def receive: Receive = {
-        case Data(t) =>
-          sink.add(t)
+        case Data(kv) =>
+          sink.add(kv)
         case Finish =>
-          val ret = sink.close()
-          sender() ! WorkerComplete((s, ret))
+          val out = sink.close()
+          sender() ! WorkerComplete((k, out))
           context.stop(self)
       }
     }
 
     lazy val router = system.actorOf(Props(new Router))
 
-    new Sink[T, List[(S, R)]] {
-      def add(elem: T): Unit = router ! Data(elem)
-      def close(): List[(S, R)] = Await.result((router ? Finish).mapTo[Complete], timeout.duration).ret
+    new Sink[KV, List[(K, Out)]] {
+      def add(kv: KV): Unit = router ! Data(kv)
+      def close(): List[(K, Out)] = Await.result((router ? Finish).mapTo[Complete], timeout.duration).kOuts
     }
   }
 }
