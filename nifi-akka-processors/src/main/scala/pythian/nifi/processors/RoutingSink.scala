@@ -26,8 +26,12 @@ object RoutingSink {
     class Router extends Actor {
       private var groups = Map.empty[K, ActorRef]
       private var actors = Map.empty[ActorRef, K]
-      private var finishSender: ActorRef = _
+      private var finishSender = Option.empty[ActorRef]
       private var kOuts = List.empty[(K, Out)]
+      private def checkComplete(): Unit = if (actors.isEmpty) {
+        finishSender.foreach(_ ! Complete(kOuts))
+        context.stop(self)
+      }
       def receive: Receive = {
         case data @ Data(kv) =>
           val k = groupBy(kv)
@@ -43,18 +47,16 @@ object RoutingSink {
           }
           worker ! data
         case Finish =>
-          finishSender = sender()
+          finishSender = Some(sender())
           actors.keys.foreach(_ ! Finish)
+          checkComplete()
         case WorkerComplete(kOut) =>
           kOuts = kOut :: kOuts
         case Terminated(actor) =>
           val s = actors(actor)
           groups = groups - s
           actors = actors - actor
-          if (actors.isEmpty) {
-            finishSender ! Complete(kOuts)
-            context.stop(self)
-          }
+          checkComplete()
       }
     }
 

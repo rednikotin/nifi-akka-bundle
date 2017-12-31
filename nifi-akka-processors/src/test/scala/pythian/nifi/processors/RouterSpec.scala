@@ -101,6 +101,8 @@ class RouterSpec extends FunSpec {
       runner.setProperty("red", "true")
       runner.setProperty("green", "false")
 
+      //println(">>>" + bigContent + "<<<")
+
       val content = new ByteArrayInputStream(bigContent.getBytes)
       val relBlack = new Relationship.Builder().name("black").build()
       val relRed = new Relationship.Builder().name("red").build()
@@ -112,6 +114,31 @@ class RouterSpec extends FunSpec {
       runner.assertTransferCount(RelUnmatched, 2)
       runner.assertTransferCount(relBlack, 0)
       runner.assertTransferCount(relRed, 1)
+      runner.assertTransferCount(relGreen, 0)
+      runner.assertTransferCount(RelIncompatible, 0)
+      runner.assertTransferCount(RelFailure, 0)
+
+      //printFiles(runner, relRed)
+    }
+    it("should successfully process a empty FlowFile") {
+      val processor = new Router
+      val runner: TestRunner = TestRunners.newTestRunner(processor)
+      runner.setProperty(PROCESSOR, code)
+      runner.setProperty("black", "true")
+      runner.setProperty("red", "true")
+      runner.setProperty("green", "false")
+
+      val content = new ByteArrayInputStream("".getBytes)
+      val relBlack = new Relationship.Builder().name("black").build()
+      val relRed = new Relationship.Builder().name("red").build()
+      val relGreen = new Relationship.Builder().name("green").build()
+
+      runner.enqueue(content)
+      runner.run()
+
+      runner.assertTransferCount(RelUnmatched, 0)
+      runner.assertTransferCount(relBlack, 0)
+      runner.assertTransferCount(relRed, 0)
       runner.assertTransferCount(relGreen, 0)
       runner.assertTransferCount(RelIncompatible, 0)
       runner.assertTransferCount(RelFailure, 0)

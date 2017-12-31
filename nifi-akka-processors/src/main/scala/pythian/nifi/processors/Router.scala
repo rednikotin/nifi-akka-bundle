@@ -127,7 +127,7 @@ class Router extends AbstractProcessor with RouterProperties with RouterRelation
 
           val br = new BufferedReader(new InputStreamReader(in))
           var line: String = null
-          while ( {
+          while ({
             line = br.readLine()
             line != null
           }) {
